@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const crypto  = require('crypto');
 
 const PORT         = process.env.PORT         || 3000;
-const DEVICE_TOKEN = process.env.DEVICE_TOKEN || '';
+const DEVICE_TOKEN = process.env.API_BRASIL_TOKEN || '';
 const BEARER_TOKEN = process.env.BEARER_TOKEN || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const AWS_ACCESS_KEY = process.env.AWS_ACCESS_KEY || '';
