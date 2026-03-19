@@ -39,15 +39,19 @@ const server = http.createServer((req, res) => {
   const placa = match[1].toUpperCase().replace('-', '');
   console.log(`Consultando placa: ${placa}`);
 
+  // API Brasil usa POST com body JSON
+  const body = JSON.stringify({ placa: placa });
+
   const options = {
     hostname: 'gateway.apibrasil.io',
-    path: `/api/v2/vehicles/dados/placa/${placa}`,
-    method: 'GET',
+    path: '/api/v2/vehicles/dados',
+    method: 'POST',
     headers: {
       'Authorization': `Bearer ${API_TOKEN}`,
       'DeviceToken': API_TOKEN,
       'Content-Type': 'application/json',
-      'Accept': 'application/json'
+      'Accept': 'application/json',
+      'Content-Length': Buffer.byteLength(body)
     }
   };
 
@@ -55,13 +59,13 @@ const server = http.createServer((req, res) => {
     let data = '';
     apiRes.on('data', chunk => data += chunk);
     apiRes.on('end', () => {
-      console.log(`API Brasil respondeu: ${apiRes.statusCode}`);
+      console.log(`API Brasil respondeu: ${apiRes.statusCode} — ${data.substring(0, 200)}`);
       res.writeHead(apiRes.statusCode, { 'Content-Type': 'application/json' });
       res.end(data);
     });
   });
 
-  apiReq.setTimeout(10000, () => {
+  apiReq.setTimeout(15000, () => {
     console.error('Timeout na API Brasil');
     apiReq.destroy();
     res.writeHead(504, { 'Content-Type': 'application/json' });
@@ -74,6 +78,7 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ error: 'Erro ao conectar com API Brasil', detail: e.message }));
   });
 
+  apiReq.write(body);
   apiReq.end();
 });
 
