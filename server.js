@@ -14,6 +14,8 @@ const pool = new Pool({
 });
 
 async function initDB() {
+  // Adiciona coluna assinatura_mec se não existir (migration segura)
+  await pool.query(`ALTER TABLE checkins ADD COLUMN IF NOT EXISTS assinatura_mec TEXT`).catch(()=>{});
   await pool.query(`
     CREATE TABLE IF NOT EXISTS checkins (
       id           BIGINT PRIMARY KEY,
@@ -31,6 +33,7 @@ async function initDB() {
       assinatura   TEXT,
       checkin_at   TEXT,
       checkout_at  TEXT,
+      assinatura_mec TEXT,
       status       VARCHAR(20) DEFAULT 'checkin',
       operador     TEXT,
       created_at   TIMESTAMP DEFAULT NOW()
@@ -124,14 +127,14 @@ const server = http.createServer(async (req, res) => {
           (id, placa, modelo, ano, cor, combustivel_tipo, km, combustivel,
            proprietario, telefone, doc, zones, assinatura,
            checkin_at, checkout_at, status, operador)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
         ON CONFLICT (id) DO UPDATE SET
           checkout_at = EXCLUDED.checkout_at,
           status      = EXCLUDED.status
       `, [
         r.id, r.placa, r.modelo, r.ano, r.cor, r.combustivelTipo,
         r.km, r.combustivel, r.proprietario, r.telefone, r.doc,
-        JSON.stringify(r.zones), r.assinatura,
+        JSON.stringify(r.zones), r.assinatura, r.assinaturaMec || null,
         r.checkinAt, r.checkoutAt || null, r.status, r.operador
       ]);
       res.writeHead(200, { 'Content-Type': 'application/json' });
