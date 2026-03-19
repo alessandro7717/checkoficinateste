@@ -1,10 +1,13 @@
 {
   "name": "oficina-proxy",
-  "version": "1.0.0",
-  "description": "Proxy para API Brasil — Oficina Check-in",
+  "version": "2.0.0",
+  "description": "Proxy + API para Oficina Check-in",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
+  },
+  "dependencies": {
+    "pg": "^8.11.3"
   },
   "engines": {
     "node": ">=18"
