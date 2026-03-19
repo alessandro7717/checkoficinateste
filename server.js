@@ -115,8 +115,7 @@ async function uploadS3(fileBuffer, fileName, contentType) {
         'Content-Length': fileBuffer.length,
         'x-amz-content-sha256': payloadHash,
         'x-amz-date': datetime,
-        'Authorization': authorization,
-        'x-amz-acl': 'public-read'
+        'Authorization': authorization
       }
     };
     const req = https.request(options, res => {
@@ -245,6 +244,72 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ok:true,checkoutAt}));
     } catch(e) {
       res.writeHead(500); res.end(JSON.stringify({error:e.message}));
+    }
+    return;
+  }
+
+  // ── PROXY FOTO DO S3 (bucket privado) ──────────────────────────
+  const matchFoto = req.url.match(/^\/foto\/(.+)$/);
+  if (req.method === 'GET' && matchFoto) {
+    try {
+      const fileName = decodeURIComponent(matchFoto[1]);
+      const key      = `checkins/${fileName}`;
+      const bucket   = AWS_BUCKET;
+      const region   = AWS_REGION;
+      const host     = `${bucket}.s3.${region}.amazonaws.com`;
+
+      const now      = new Date();
+      const date     = now.toISOString().slice(0,10).replace(/-/g,'');
+      const datetime = now.toISOString().replace(/[:-]/g,'').slice(0,15) + 'Z';
+
+      const payloadHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'; // empty body
+
+      const canonicalHeaders =
+        `host:${host}
+` +
+        `x-amz-content-sha256:${payloadHash}
+` +
+        `x-amz-date:${datetime}
+`;
+      const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+
+      const canonicalRequest = ['GET', `/${key}`, '', canonicalHeaders, signedHeaders, payloadHash].join('
+');
+      const credentialScope  = `${date}/${region}/s3/aws4_request`;
+      const stringToSign     = ['AWS4-HMAC-SHA256', datetime, credentialScope, hash(canonicalRequest)].join('
+');
+      const signingKey       = hmac(hmac(hmac(hmac(`AWS4${AWS_SECRET_KEY}`, date), region), 's3'), 'aws4_request');
+      const signature        = hmac(signingKey, stringToSign, 'hex');
+      const authorization    =
+        `AWS4-HMAC-SHA256 Credential=${AWS_ACCESS_KEY}/${credentialScope}, ` +
+        `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const options = {
+        hostname: host, path: `/${key}`, method: 'GET',
+        headers: {
+          'host': host,
+          'x-amz-content-sha256': payloadHash,
+          'x-amz-date': datetime,
+          'Authorization': authorization
+        }
+      };
+
+      const s3req = https.request(options, s3res => {
+        if (s3res.statusCode === 200) {
+          res.writeHead(200, {
+            'Content-Type': s3res.headers['content-type'] || 'image/jpeg',
+            'Cache-Control': 'private, max-age=86400'
+          });
+          s3res.pipe(res);
+        } else {
+          res.writeHead(s3res.statusCode);
+          res.end();
+        }
+      });
+      s3req.on('error', e => { res.writeHead(502); res.end(); });
+      s3req.end();
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({error: e.message}));
     }
     return;
   }
