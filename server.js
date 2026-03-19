@@ -4,31 +4,40 @@ const http = require('http');
 const PORT = process.env.PORT || 3000;
 const API_TOKEN = process.env.API_BRASIL_TOKEN || '94e85cc0-e392-400e-b57e-e419788601c9';
 
-const server = http.createServer((req, res) => {
-  // CORS — permite chamada do Netlify
+function setCORS(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+}
 
-  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+const server = http.createServer((req, res) => {
+  setCORS(res);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  console.log(`${req.method} ${req.url}`);
 
   // Health check
   if (req.url === '/' || req.url === '/health') {
-    res.writeHead(200, {'Content-Type':'application/json'});
-    res.end(JSON.stringify({status:'ok', service:'oficina-proxy'}));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', service: 'oficina-proxy' }));
     return;
   }
 
-  // Rota: GET /placa/:placa
+  // /placa/ABC1234
   const match = req.url.match(/^\/placa\/([A-Z0-9]{7,8})$/i);
   if (!match) {
-    res.writeHead(404, {'Content-Type':'application/json'});
-    res.end(JSON.stringify({error:'Rota não encontrada. Use /placa/ABC1234'}));
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Use /placa/ABC1234' }));
     return;
   }
 
-  const placa = match[1].toUpperCase();
-  console.log(`[${new Date().toISOString()}] Consultando placa: ${placa}`);
+  const placa = match[1].toUpperCase().replace('-', '');
+  console.log(`Consultando placa: ${placa}`);
 
   const options = {
     hostname: 'gateway.apibrasil.io',
@@ -37,7 +46,8 @@ const server = http.createServer((req, res) => {
     headers: {
       'Authorization': `Bearer ${API_TOKEN}`,
       'DeviceToken': API_TOKEN,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
     }
   };
 
@@ -45,20 +55,28 @@ const server = http.createServer((req, res) => {
     let data = '';
     apiRes.on('data', chunk => data += chunk);
     apiRes.on('end', () => {
-      res.writeHead(apiRes.statusCode, {'Content-Type':'application/json'});
+      console.log(`API Brasil respondeu: ${apiRes.statusCode}`);
+      res.writeHead(apiRes.statusCode, { 'Content-Type': 'application/json' });
       res.end(data);
     });
   });
 
+  apiReq.setTimeout(10000, () => {
+    console.error('Timeout na API Brasil');
+    apiReq.destroy();
+    res.writeHead(504, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Timeout na consulta da placa' }));
+  });
+
   apiReq.on('error', (e) => {
-    console.error('Erro na API Brasil:', e.message);
-    res.writeHead(502, {'Content-Type':'application/json'});
-    res.end(JSON.stringify({error:'Erro ao conectar com a API Brasil', detail: e.message}));
+    console.error('Erro:', e.message);
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Erro ao conectar com API Brasil', detail: e.message }));
   });
 
   apiReq.end();
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Proxy rodando na porta ${PORT}`);
 });
